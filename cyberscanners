@@ -1,0 +1,138 @@
+
+# ==========================================
+#             CYBERTOOLS
+#          CYBERSCANNER V2.0
+# ==========================================
+
+$Host.UI.RawUI.WindowTitle = "CYBERTOOLS | Security Center"
+
+function Show-Logo {
+    Clear-Host
+    $logo = @"
+
+   ____  _____ ____  _____ ____ _____ _____
+  / ___|| ____|  _ \| ____|  _ \_   _| ____|
+ | |    |  _| | |_) |  _| | |_) || | |  _|
+ | |___ | |___|  _ <| |___|  _ < | | | |___
+  \____||_____|_| \_\_____|_| \_\|_| |_____|
+
+              SECURITY CENTER
+"@
+
+    foreach ($line in $logo -split "`n") {
+        Write-Host $line -ForegroundColor Cyan
+        Start-Sleep -Milliseconds 35
+    }
+
+    Write-Host ""
+    Write-Host "       SYSTEME DE SCAN - VERSION 2.0" -ForegroundColor DarkCyan
+}
+
+function Show-Menu {
+    Write-Host ""
+    Write-Host "  +----------------------------------+" -ForegroundColor DarkCyan
+    Write-Host "  |          MENU PRINCIPAL          |" -ForegroundColor Cyan
+    Write-Host "  +----------------------------------+" -ForegroundColor DarkCyan
+    Write-Host "  |  [1] Scanner un dossier          |" -ForegroundColor White
+    Write-Host "  |  [2] Informations du scanner     |" -ForegroundColor White
+    Write-Host "  |  [3] Quitter                     |" -ForegroundColor White
+    Write-Host "  +----------------------------------+" -ForegroundColor DarkCyan
+    Write-Host ""
+}
+
+function Start-Scan {
+    Write-Host " [SCAN] Entrez le chemin d'un dossier." -ForegroundColor Cyan
+    $folder = Read-Host " > "
+
+    if (!(Test-Path -LiteralPath $folder -PathType Container)) {
+        Write-Host " [ERREUR] Dossier introuvable." -ForegroundColor Red
+        return
+    }
+
+    Write-Host "`n [INFO] Preparation de l'analyse..." -ForegroundColor Yellow
+
+    $files = @(Get-ChildItem -LiteralPath $folder -File -Recurse -ErrorAction SilentlyContinue)
+    $total = $files.Count
+    $results = @()
+    $suspectExtensions = @(".bat", ".cmd", ".scr", ".vbs", ".ps1")
+
+    if ($total -eq 0) {
+        Write-Host " Aucun fichier trouve." -ForegroundColor Yellow
+        return
+    }
+
+    for ($i = 0; $i -lt $total; $i++) {
+        $file = $files[$i]
+        $percent = [int](($i + 1) / $total * 100)
+
+        Write-Progress -Activity "CYBERTOOLS - Analyse" `
+            -Status "$($file.Name) | $percent%" `
+            -PercentComplete $percent
+
+        try {
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+            $status = "Aucune alerte par extension"
+
+            if ($suspectExtensions -contains $file.Extension.ToLower()) {
+                $status = "A VERIFIER"
+            }
+
+            $results += [PSCustomObject]@{
+                Fichier = $file.Name
+                Extension = $file.Extension
+                SHA256 = $hash
+                Statut = $status
+            }
+        }
+        catch {
+            Write-Host " [!] Fichier inaccessible : $($file.Name)" -ForegroundColor Yellow
+        }
+    }
+
+    Write-Progress -Activity "CYBERTOOLS - Analyse" -Completed
+
+    Write-Host "`n ===== RESULTATS =====" -ForegroundColor Cyan
+    $results | Format-Table Fichier, Extension, Statut -AutoSize
+
+    $alerts = @($results | Where-Object { $_.Statut -eq "A VERIFIER" }).Count
+
+    Write-Host " Fichiers analyses : $($results.Count)" -ForegroundColor Green
+    Write-Host " Fichiers a verifier : $alerts" -ForegroundColor Yellow
+
+    $report = Join-Path ([Environment]::GetFolderPath("Desktop")) "CyberTools_Report.csv"
+    $results | Export-Csv -Path $report -NoTypeInformation -Encoding UTF8
+
+    Write-Host "`n Rapport enregistre sur le Bureau." -ForegroundColor Green
+    Write-Host " $report" -ForegroundColor DarkCyan
+}
+
+do {
+    Show-Logo
+    Show-Menu
+
+    $choice = Read-Host " Selection"
+
+    switch ($choice) {
+        "1" {
+            Start-Scan
+            Write-Host "`n Appuyez sur Entree pour continuer..."
+            Read-Host
+        }
+        "2" {
+            Write-Host "`n CYBERTOOLS V2.0" -ForegroundColor Cyan
+            Write-Host " Scanner de fichiers et calcul SHA-256."
+            Write-Host " Analyse locale, sans connexion Internet."
+            Write-Host " Les extensions signalees ne sont pas necessairement malveillantes."
+            Read-Host "`n Entree pour continuer"
+        }
+        "3" {
+            Write-Host "`n Fermeture de CYBERTOOLS..." -ForegroundColor Cyan
+        }
+        default {
+            Write-Host "`n Choix invalide !" -ForegroundColor Red
+            Start-Sleep -Milliseconds 900
+        }
+    }
+} while ($choice -ne "3")
+
+Write-Host "`n Merci d'avoir utilise CYBERTOOLS." -ForegroundColor Cyan
